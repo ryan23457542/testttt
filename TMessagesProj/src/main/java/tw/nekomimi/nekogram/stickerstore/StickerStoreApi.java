@@ -115,9 +115,11 @@ public class StickerStoreApi {
                 if (item instanceof JSONObject) {
                     result.add(StickerPackInfo.fromJson((JSONObject) item));
                 } else if (item instanceof String) {
+                    // Bare short_name string with no metadata - the display name is
+                    // still resolved from Telegram itself via StickerSetResolver, same
+                    // as the object case, so there's nothing else to set here.
                     StickerPackInfo info = new StickerPackInfo();
                     info.shortName = (String) item;
-                    info.title = (String) item;
                     result.add(info);
                 }
             }
