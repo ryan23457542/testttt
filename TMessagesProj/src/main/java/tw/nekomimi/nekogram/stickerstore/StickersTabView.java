@@ -13,15 +13,11 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
-import org.telegram.messenger.FileLog;
-import org.telegram.messenger.LocaleController;
-import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RadialProgressView;
 import org.telegram.ui.Components.RecyclerListView;
-import org.telegram.ui.Components.StickersAlert;
 
 import java.util.ArrayList;
 
@@ -39,6 +35,7 @@ public class StickersTabView extends FrameLayout {
     private final ArrayList<StickerPackInfo> packs = new ArrayList<>();
     private String currentSort = StickerStoreApi.SORT_NEWEST;
     private boolean loading;
+    private int requestGeneration;
 
     public StickersTabView(Context context, BaseFragment fragment) {
         super(context);
@@ -117,7 +114,9 @@ public class StickersTabView extends FrameLayout {
     }
 
     private void setSort(String sort) {
-        if (sort.equals(currentSort) || loading) {
+        // Sort chips stay tappable even while a previous load is still in flight - tapping
+        // again just supersedes it. loadPacks() resets the loading state for the new request.
+        if (sort.equals(currentSort)) {
             return;
         }
         currentSort = sort;
@@ -135,12 +134,14 @@ public class StickersTabView extends FrameLayout {
             return;
         }
         loading = true;
+        final int generation = ++requestGeneration;
         progressView.setVisibility(VISIBLE);
         infoView.setVisibility(GONE);
         listView.setVisibility(GONE);
         StickerStoreApi.fetchPacks(null, currentSort, 1, 50, new StickerStoreApi.PacksCallback() {
             @Override
             public void onSuccess(ArrayList<StickerPackInfo> result) {
+                if (generation != requestGeneration) return; // superseded by a newer sort tap
                 loading = false;
                 progressView.setVisibility(GONE);
                 packs.clear();
@@ -157,6 +158,7 @@ public class StickersTabView extends FrameLayout {
 
             @Override
             public void onError(String message) {
+                if (generation != requestGeneration) return;
                 loading = false;
                 progressView.setVisibility(GONE);
                 listView.setVisibility(GONE);
@@ -170,14 +172,8 @@ public class StickersTabView extends FrameLayout {
         if (pack.shortName == null || pack.shortName.isEmpty() || fragment == null || fragment.getParentActivity() == null) {
             return;
         }
-        try {
-            TLRPC.TL_inputStickerSetShortName inputStickerSet = new TLRPC.TL_inputStickerSetShortName();
-            inputStickerSet.short_name = pack.shortName;
-            StickersAlert alert = new StickersAlert(fragment.getParentActivity(), fragment, inputStickerSet, null, null, false);
-            fragment.showDialog(alert);
-        } catch (Exception e) {
-            FileLog.e(e);
-        }
+        StickerPackPreviewSheet sheet = new StickerPackPreviewSheet(fragment.getParentActivity(), fragment, pack, fragment.getCurrentAccount());
+        fragment.showDialog(sheet);
     }
 
     private class Adapter extends RecyclerListView.SelectionAdapter {
@@ -200,7 +196,7 @@ public class StickersTabView extends FrameLayout {
 
         @Override
         public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
-            ((StickerPackGridCell) holder.itemView).setPack(packs.get(position));
+            ((StickerPackGridCell) holder.itemView).setPack(packs.get(position), fragment.getCurrentAccount());
             ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) holder.itemView.getLayoutParams();
             lp.leftMargin = AndroidUtilities.dp(4);
             lp.rightMargin = AndroidUtilities.dp(4);

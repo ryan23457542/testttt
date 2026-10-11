@@ -9,20 +9,26 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.DocumentObject;
+import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
+import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.LayoutHelper;
 import tw.nekomimi.nekogram.settings.GroupCardHelper;
 
 public class StickerPackGridCell extends FrameLayout {
 
-    private final FrameLayout iconWrap;
-    private final TextView iconLetter;
+    private final BackupImageView iconView;
     private final TextView titleView;
     private final TextView categoryView;
     private final TextView ratingView;
     private final TextView downloadsView;
+
+    private StickerPackInfo currentPack;
+    private int currentAccount;
 
     public StickerPackGridCell(Context context) {
         super(context);
@@ -33,19 +39,14 @@ public class StickerPackGridCell extends FrameLayout {
         column.setOrientation(LinearLayout.VERTICAL);
         addView(column, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
-        iconWrap = new FrameLayout(context);
+        iconView = new BackupImageView(context);
+        iconView.setRoundRadius(AndroidUtilities.dp(14));
         GradientDrawable iconBg = new GradientDrawable();
         iconBg.setShape(GradientDrawable.RECTANGLE);
         iconBg.setCornerRadius(AndroidUtilities.dp(14));
         iconBg.setColor(Theme.getColor(Theme.key_windowBackgroundGray));
-        iconWrap.setBackground(iconBg);
-        column.addView(iconWrap, LayoutHelper.createLinear(72, 72, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 8));
-
-        iconLetter = new TextView(context);
-        iconLetter.setTextSize(26);
-        iconLetter.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
-        iconLetter.setGravity(Gravity.CENTER);
-        iconWrap.addView(iconLetter, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        iconView.setBackground(iconBg);
+        column.addView(iconView, LayoutHelper.createLinear(72, 72, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 8));
 
         titleView = new TextView(context);
         titleView.setTextSize(14);
@@ -82,16 +83,66 @@ public class StickerPackGridCell extends FrameLayout {
         setWillNotDraw(false);
     }
 
-    public void setPack(StickerPackInfo pack) {
-        String title = pack.title != null ? pack.title : pack.shortName;
-        titleView.setText(title);
-        iconLetter.setText(title != null && !title.isEmpty() ? title.substring(0, 1).toUpperCase() : "?");
+    public void setPack(StickerPackInfo pack, int currentAccount) {
+        this.currentPack = pack;
+        this.currentAccount = currentAccount;
+
         categoryView.setText(pack.category != null ? pack.category : "");
         categoryView.setVisibility(pack.category != null && !pack.category.isEmpty() ? View.VISIBLE : View.GONE);
-        ratingView.setText(pack.rating > 0 ? String.format(LocaleController.getInstance().getCurrentLocale(), "★ %.1f", pack.rating) : "");
-        ratingView.setVisibility(pack.rating > 0 ? View.VISIBLE : View.GONE);
+
+        if (pack.ratingAvg > 0) {
+            ratingView.setText(pack.ratingCount > 0
+                    ? String.format(LocaleController.getInstance().getCurrentLocale(), "★ %.1f (%d)", pack.ratingAvg, pack.ratingCount)
+                    : String.format(LocaleController.getInstance().getCurrentLocale(), "★ %.1f", pack.ratingAvg));
+            ratingView.setVisibility(View.VISIBLE);
+        } else {
+            ratingView.setVisibility(View.GONE);
+        }
         downloadsView.setText(pack.downloads > 0 ? formatDownloads(pack.downloads) : "");
         downloadsView.setVisibility(pack.downloads > 0 ? View.VISIBLE : View.GONE);
+
+        applyResolvedTitleAndIcon();
+
+        if (pack.resolvedSet == null) {
+            TLRPC.TL_messages_stickerSet cached = StickerSetResolver.getCached(pack.shortName);
+            if (cached != null) {
+                pack.resolvedSet = cached;
+                applyResolvedTitleAndIcon();
+            } else {
+                StickerSetResolver.resolve(currentAccount, pack.shortName, new StickerSetResolver.Callback() {
+                    @Override
+                    public void onResolved(TLRPC.TL_messages_stickerSet stickerSet) {
+                        if (currentPack == pack) {
+                            pack.resolvedSet = stickerSet;
+                            applyResolvedTitleAndIcon();
+                        }
+                    }
+
+                    @Override
+                    public void onError() {
+                        if (currentPack == pack) {
+                            titleView.setText(R.string.AddStickersNotFound);
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    private void applyResolvedTitleAndIcon() {
+        String title = currentPack.getDisplayTitle();
+        titleView.setText(title != null ? title : "…");
+
+        TLRPC.Document thumbDocument = currentPack.getFirstSticker();
+        if (currentPack.resolvedSet != null && currentPack.resolvedSet.set != null && !currentPack.resolvedSet.set.thumbs.isEmpty()) {
+            TLRPC.PhotoSize thumb = FileLoader.getClosestPhotoSizeWithSize(currentPack.resolvedSet.set.thumbs, 90);
+            iconView.setImage(org.telegram.messenger.ImageLocation.getForSticker(thumb, thumbDocument, currentPack.resolvedSet.set.thumb_version), "80_80", (android.graphics.drawable.Drawable) null, currentPack.resolvedSet);
+        } else if (thumbDocument != null) {
+            var svgThumb = DocumentObject.getSvgThumb(thumbDocument, Theme.key_windowBackgroundGray, 1.0f);
+            iconView.setImage(org.telegram.messenger.ImageLocation.getForDocument(thumbDocument), "80_80", svgThumb, currentPack.resolvedSet);
+        } else {
+            iconView.setImageDrawable(null);
+        }
     }
 
     private static String formatDownloads(int downloads) {

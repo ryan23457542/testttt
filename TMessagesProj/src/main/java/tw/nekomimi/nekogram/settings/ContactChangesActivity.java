@@ -324,25 +324,31 @@ public class ContactChangesActivity extends BaseFragment implements Notification
             avatarImageView.setRoundRadius(dp(10));
             addView(avatarImageView, LayoutHelper.createFrame(46, 46, Gravity.LEFT | Gravity.TOP, 13, 10, 0, 0));
 
+            dateTextView = new TextView(context);
+            dateTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText3));
+            dateTextView.setTextSize(13);
+            dateTextView.setSingleLine(true);
+            addView(dateTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.RIGHT | Gravity.TOP, 0, 13, 13, 0));
+
+            // MATCH_PARENT width + matching left/right margins so setSingleLine/setEllipsize
+            // actually take effect for long names, instead of growing under the date text.
             nameTextView = new TextView(context);
             nameTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
             nameTextView.setTypeface(Typeface.DEFAULT_BOLD);
             nameTextView.setTextSize(16);
             nameTextView.setSingleLine(true);
             nameTextView.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            addView(nameTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP, 75, 11, 60, 0));
+            addView(nameTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP, 75, 11, 70, 0));
 
-            dateTextView = new TextView(context);
-            dateTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText3));
-            dateTextView.setTextSize(13);
-            addView(dateTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.RIGHT | Gravity.TOP, 0, 13, 13, 0));
-
+            // MATCH_PARENT width + bottom margin so the cell can grow to fit up to 2 lines
+            // instead of being clipped by a fixed-height onMeasure.
             descriptionTextView = new TextView(context);
             descriptionTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
             descriptionTextView.setTextSize(14);
             descriptionTextView.setMaxLines(2);
+            descriptionTextView.setLineSpacing(dp(2), 1f);
             descriptionTextView.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            addView(descriptionTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP, 75, 34, 13, 0));
+            addView(descriptionTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP, 75, 34, 13, 10));
         }
 
         void bind(LogEntry entry, int groupPos) {
@@ -366,7 +372,15 @@ public class ContactChangesActivity extends BaseFragment implements Notification
 
         @Override
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-            super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(dp(66), MeasureSpec.EXACTLY));
+            // Let the cell grow to fit its real content (avatar + up to 2 lines of
+            // description) instead of forcing a fixed height that clipped longer entries.
+            // A minimum height still keeps short single-line entries from feeling cramped
+            // and matches the avatar's own footprint (10dp top + 46dp tall + 10dp bottom).
+            super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+            int contentHeight = getMeasuredHeight();
+            int minHeight = dp(66);
+            int height = Math.max(contentHeight, minHeight);
+            super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
         }
 
         @Override
