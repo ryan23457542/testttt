@@ -42,10 +42,18 @@ android {
         noCompress += "pack"
     }
 
+    // Only treat signing as configured when storeFile actually points at a real, non-empty
+    // keystore - a storeFile property that is merely present (but pointing at a missing or
+    // 0-byte file, e.g. from a blank KEYSTORE_JKS secret in CI) must NOT be treated as a
+    // valid signing config, or the build can silently produce an apk that was never really
+    // signed with the intended key.
+    def keystoreFile = localProperties.getProperty("storeFile") != null ? file(localProperties.getProperty("storeFile")) : null
+    def hasRealKeystore = keystoreFile != null && keystoreFile.exists() && keystoreFile.length() > 0
+
     signingConfigs {
-        if (localProperties.getProperty("storeFile") != null) {
+        if (hasRealKeystore) {
             sign {
-                storeFile file(localProperties.getProperty("storeFile"))
+                storeFile keystoreFile
                 storePassword localProperties.getProperty("storePassword")
                 keyAlias localProperties.getProperty("keyAlias")
                 keyPassword localProperties.getProperty("keyPassword")
@@ -55,7 +63,7 @@ android {
 
     buildTypes {
         debug {
-            if (localProperties.getProperty("storeFile") != null) {
+            if (hasRealKeystore) {
                 signingConfig signingConfigs.sign
             }
             applicationIdSuffix ".beta"
@@ -65,7 +73,7 @@ android {
             minifyEnabled true
             shrinkResources true
             vcsInfo.include false
-            if (localProperties.getProperty("storeFile") != null) {
+            if (hasRealKeystore) {
                 signingConfig signingConfigs.sign
             } else {
                 signingConfig signingConfigs.debug

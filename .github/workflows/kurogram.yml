@@ -35,15 +35,52 @@ jobs:
           "configuration_version":"1"}
           JSON
       - name: Configure Signing
+        # Only write storeFile/signing lines into local.properties when the keystore
+        # secret actually has content. Previously these lines were written unconditionally,
+        # so if KEYSTORE_JKS/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD were ever unset or
+        # removed from repo secrets, this step would still produce a `storeFile=...` line
+        # pointing at an empty/invalid keystore.jks - the Gradle side only checks whether
+        # that property is present (non-null), not whether it points to something real, so
+        # the build could still believe it was signing properly.
         run: |
-          echo "storeFile=${{ github.workspace }}/keystore.jks" >> local.properties
-          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> local.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> local.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> local.properties
-          echo "${{ secrets.KEYSTORE_JKS }}" | base64 --decode > keystore.jks
+          if [ -n "${{ secrets.KEYSTORE_JKS }}" ]; then
+            echo "${{ secrets.KEYSTORE_JKS }}" | base64 --decode > keystore.jks
+            if [ -s keystore.jks ]; then
+              echo "storeFile=${{ github.workspace }}/keystore.jks" >> local.properties
+              echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> local.properties
+              echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> local.properties
+              echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> local.properties
+              echo "Keystore decoded, signing configured."
+            else
+              echo "::warning::KEYSTORE_JKS secret decoded to an empty file - skipping signing config, debug build will use Android's default debug key."
+              rm -f keystore.jks
+            fi
+          else
+            echo "::warning::KEYSTORE_JKS secret is not set - skipping signing config, debug build will use Android's default debug key."
+          fi
       - name: Build
         run: ./gradlew assembleDebug
+      - name: Verify APKs are signed
+        run: |
+          for apk in TMessagesProj_App/build/outputs/apk/debug/*.apk; do
+            echo "== $apk =="
+            "$ANDROID_HOME"/build-tools/37.0.0/apksigner verify --verbose "$apk" || (echo "::error::$apk is not validly signed" && exit 1)
+          done
+      # Upload the universal APK (installs on any device architecture) as the primary
+      # artifact, alongside the smaller per-ABI ones for anyone who wants a smaller
+      # download on a known device.
       - uses: actions/upload-artifact@v7
         with:
+          name: Kurogram-universal
+          path: TMessagesProj_App/build/outputs/apk/debug/*-universal.apk
+          archive: false
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Kurogram-arm64-v8a
+          path: TMessagesProj_App/build/outputs/apk/debug/*-arm64-v8a.apk
+          archive: false
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Kurogram-armeabi-v7a
           path: TMessagesProj_App/build/outputs/apk/debug/*-armeabi-v7a.apk
           archive: false
