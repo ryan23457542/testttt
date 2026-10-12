@@ -1,6 +1,15 @@
 name: Kurogram Debug Build
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: "Which ABI(s) to build"
+        type: choice
+        default: arm64-v8a
+        options:
+          - arm64-v8a
+          - armeabi-v7a
+          - all
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -59,24 +68,28 @@ jobs:
             echo "::warning::KEYSTORE_JKS secret is not set - skipping signing config, debug build will use Android's default debug key."
           fi
       - name: Build
-        run: ./gradlew assembleDebug
+        # buildAbi restricts TMessagesProj_App/build.gradle's splits.abi to compiling and
+        # packaging only the chosen target(s) (see the comment there) instead of all four
+        # ABIs plus the universal apk every run - this is what actually makes a
+        # dev/testing run fast, not just which outputs get uploaded afterward.
+        run: ./gradlew assembleDebug -PbuildAbi=${{ inputs.target }}
       - name: Verify APKs are signed
         run: |
           for apk in TMessagesProj_App/build/outputs/apk/debug/*.apk; do
             echo "== $apk =="
             "$ANDROID_HOME"/build-tools/37.0.0/apksigner verify --verbose "$apk" || (echo "::error::$apk is not validly signed" && exit 1)
           done
-      # Only the per-ABI builds are uploaded - the universal APK bundles all
-      # architectures into one file and balloons past 180MB, which isn't worth it for
-      # this app. arm64-v8a covers modern 64-bit devices, armeabi-v7a covers older
-      # 32-bit ones; between the two that's effectively full device coverage at a
-      # fraction of the size.
-      - uses: actions/upload-artifact@v7
+      # Only upload whichever ABI(s) were actually built for this run. The universal APK
+      # is never built from this workflow at all now (see splits.abi) since it bundles
+      # every ABI into one file and balloons past 180MB.
+      - if: ${{ inputs.target == 'arm64-v8a' || inputs.target == 'all' }}
+        uses: actions/upload-artifact@v7
         with:
           name: Kurogram-arm64-v8a
           path: TMessagesProj_App/build/outputs/apk/debug/*-arm64-v8a.apk
           archive: false
-      - uses: actions/upload-artifact@v7
+      - if: ${{ inputs.target == 'armeabi-v7a' || inputs.target == 'all' }}
+        uses: actions/upload-artifact@v7
         with:
           name: Kurogram-armeabi-v7a
           path: TMessagesProj_App/build/outputs/apk/debug/*-armeabi-v7a.apk
