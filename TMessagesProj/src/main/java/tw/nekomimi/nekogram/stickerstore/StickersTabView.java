@@ -172,8 +172,9 @@ public class StickersTabView extends FrameLayout {
         if (pack.shortName == null || pack.shortName.isEmpty() || fragment == null || fragment.getParentActivity() == null) {
             return;
         }
-        StickerPackPreviewSheet sheet = new StickerPackPreviewSheet(fragment.getParentActivity(), fragment, pack, fragment.getCurrentAccount());
-        fragment.showDialog(sheet);
+        // A real navigated-to screen (not a popup/bottom sheet) with our own design -
+        // see StickerPackDetailActivity.
+        fragment.presentFragment(new StickerPackDetailActivity(pack));
     }
 
     private class Adapter extends RecyclerListView.SelectionAdapter {

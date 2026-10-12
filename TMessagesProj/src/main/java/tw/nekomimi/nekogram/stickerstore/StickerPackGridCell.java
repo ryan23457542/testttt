@@ -24,8 +24,8 @@ public class StickerPackGridCell extends FrameLayout {
     private final BackupImageView iconView;
     private final TextView titleView;
     private final TextView categoryView;
+    private final TextView likesView;
     private final TextView ratingView;
-    private final TextView downloadsView;
 
     private StickerPackInfo currentPack;
     private int currentAccount;
@@ -48,6 +48,7 @@ public class StickerPackGridCell extends FrameLayout {
         iconView.setBackground(iconBg);
         column.addView(iconView, LayoutHelper.createLinear(72, 72, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 8));
 
+        // Display Name only - the technical short_name is never shown anywhere in this cell.
         titleView = new TextView(context);
         titleView.setTextSize(14);
         titleView.setTypeface(AndroidUtilities.bold());
@@ -58,27 +59,30 @@ public class StickerPackGridCell extends FrameLayout {
         column.addView(titleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL));
 
         categoryView = new TextView(context);
-        categoryView.setTextSize(12);
+        categoryView.setTextSize(11);
         categoryView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
         categoryView.setGravity(Gravity.CENTER_HORIZONTAL);
         categoryView.setMaxLines(1);
         categoryView.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        column.addView(categoryView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 2, 0, 4));
+        column.addView(categoryView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 2, 0, 6));
 
+        // Bottom stats row: total likes on the bottom-left, average rating on the bottom-right.
         LinearLayout statsRow = new LinearLayout(context);
         statsRow.setOrientation(LinearLayout.HORIZONTAL);
-        statsRow.setGravity(Gravity.CENTER_HORIZONTAL);
         column.addView(statsRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        likesView = new TextView(context);
+        likesView.setTextSize(12);
+        likesView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
+        likesView.setGravity(Gravity.LEFT);
+        statsRow.addView(likesView, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.LEFT | Gravity.CENTER_VERTICAL));
 
         ratingView = new TextView(context);
         ratingView.setTextSize(12);
-        ratingView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
-        statsRow.addView(ratingView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 8, 0));
-
-        downloadsView = new TextView(context);
-        downloadsView.setTextSize(12);
-        downloadsView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
-        statsRow.addView(downloadsView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
+        ratingView.setTypeface(AndroidUtilities.bold());
+        ratingView.setTextColor(Theme.getColor(Theme.key_featuredStickers_addButton));
+        ratingView.setGravity(Gravity.RIGHT);
+        statsRow.addView(ratingView, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.RIGHT | Gravity.CENTER_VERTICAL));
 
         setWillNotDraw(false);
     }
@@ -90,16 +94,10 @@ public class StickerPackGridCell extends FrameLayout {
         categoryView.setText(pack.category != null ? pack.category : "");
         categoryView.setVisibility(pack.category != null && !pack.category.isEmpty() ? View.VISIBLE : View.GONE);
 
-        if (pack.ratingAvg > 0) {
-            ratingView.setText(pack.ratingCount > 0
-                    ? String.format(LocaleController.getInstance().getCurrentLocale(), "★ %.1f (%d)", pack.ratingAvg, pack.ratingCount)
-                    : String.format(LocaleController.getInstance().getCurrentLocale(), "★ %.1f", pack.ratingAvg));
-            ratingView.setVisibility(View.VISIBLE);
-        } else {
-            ratingView.setVisibility(View.GONE);
-        }
-        downloadsView.setText(pack.downloads > 0 ? formatDownloads(pack.downloads) : "");
-        downloadsView.setVisibility(pack.downloads > 0 ? View.VISIBLE : View.GONE);
+        likesView.setText(pack.totalLikes > 0 ? formatCount(pack.totalLikes) + " ♥" : "");
+        ratingView.setText(pack.ratingAvg > 0
+                ? String.format(LocaleController.getInstance().getCurrentLocale(), "★ %.1f", pack.ratingAvg)
+                : "");
 
         applyResolvedTitleAndIcon();
 
@@ -145,10 +143,10 @@ public class StickerPackGridCell extends FrameLayout {
         }
     }
 
-    private static String formatDownloads(int downloads) {
-        if (downloads >= 1000) {
-            return String.format(LocaleController.getInstance().getCurrentLocale(), "%.1fK ↓", downloads / 1000f);
+    private static String formatCount(int count) {
+        if (count >= 1000) {
+            return String.format(LocaleController.getInstance().getCurrentLocale(), "%.1fK", count / 1000f);
         }
-        return downloads + " ↓";
+        return String.valueOf(count);
     }
 }
