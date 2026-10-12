@@ -66,14 +66,11 @@ jobs:
             echo "== $apk =="
             "$ANDROID_HOME"/build-tools/37.0.0/apksigner verify --verbose "$apk" || (echo "::error::$apk is not validly signed" && exit 1)
           done
-      # Upload the universal APK (installs on any device architecture) as the primary
-      # artifact, alongside the smaller per-ABI ones for anyone who wants a smaller
-      # download on a known device.
-      - uses: actions/upload-artifact@v7
-        with:
-          name: Kurogram-universal
-          path: TMessagesProj_App/build/outputs/apk/debug/*-universal.apk
-          archive: false
+      # Only the per-ABI builds are uploaded - the universal APK bundles all
+      # architectures into one file and balloons past 180MB, which isn't worth it for
+      # this app. arm64-v8a covers modern 64-bit devices, armeabi-v7a covers older
+      # 32-bit ones; between the two that's effectively full device coverage at a
+      # fraction of the size.
       - uses: actions/upload-artifact@v7
         with:
           name: Kurogram-arm64-v8a
