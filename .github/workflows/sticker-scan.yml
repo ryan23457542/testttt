@@ -1,0 +1,26 @@
+name: Sticker Scanner
+on:
+  schedule:
+    # Runs every 6 hours. Telegram's featured-sticker list doesn't change often, so
+    # this is just to catch new official packs reasonably soon without scanning
+    # constantly.
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r Tools/sticker-scanner/requirements.txt
+      - name: Scan and sync official sticker packs
+        env:
+          API_ID: ${{ secrets.API_ID }}
+          API_HASH: ${{ secrets.API_HASH }}
+          TELEGRAM_SESSION_STRING: ${{ secrets.TELEGRAM_SESSION_STRING }}
+          STICKER_API_BASE_URL: ${{ secrets.STICKER_API_BASE_URL || 'https://backend-api-gn09.onrender.com' }}
+          STICKER_API_KEY: ${{ secrets.STICKER_API_KEY }}
+        run: python3 Tools/sticker-scanner/scan_official_stickers.py
