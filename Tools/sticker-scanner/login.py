@@ -1,5 +1,6 @@
 """
-Run this ONCE, interactively, to log in to Telegram and print a session string.
+Run this ONCE, interactively, to log in to Telegram and save the resulting session
+string straight to GitHub as a repo secret - no manual copy/paste needed.
 
 Why this exists: scan_official_stickers.py needs to call Telegram's
 messages.getFeaturedStickers / messages.getOldFeaturedStickers, which are only
@@ -14,28 +15,73 @@ Usage (in this Codespace's terminal):
     pip install -r requirements.txt
     python3 login.py
     # follow the prompts (phone number, then the code Telegram sends you)
-    # it will print a long string starting with "1BVtsO..." - copy that whole line
 
-Then add it as a repository secret named TELEGRAM_SESSION_STRING
-(the same API_ID / API_HASH secrets the Android app already uses are reused here -
-no new Telegram app registration needed).
+If this is run inside a GitHub Codespace (or anywhere the `gh` CLI is already
+installed and signed in - which Codespaces is, by default), the script saves the
+session string directly as the repo secret TELEGRAM_SESSION_STRING by running
+`gh secret set` for you, piping the value in rather than ever typing/pasting it
+anywhere - nothing to copy. If `gh` isn't available or isn't signed in, it falls
+back to just printing the string so you can add it manually (Settings -> Secrets
+and variables -> Actions -> New repository secret).
+
+(The same API_ID / API_HASH secrets the Android app already uses are reused here -
+no new Telegram app registration needed.)
 
 Security note: this session string is equivalent to being logged into your Telegram
-account from a new device. Treat it like a password - only paste it into the GitHub
-secret field, never into a file that gets committed. Consider using a secondary
-Telegram account for this rather than your main one, since this runs unattended on a
-schedule from GitHub's servers.
+account from a new device. Consider using a secondary Telegram account for this
+rather than your main one, since this runs unattended on a schedule from GitHub's
+servers.
 """
+import shutil
+import subprocess
+
 from telethon.sync import TelegramClient
 from telethon.sessions import StringSession
+
+SECRET_NAME = "TELEGRAM_SESSION_STRING"
+
+
+def save_secret_via_gh(session_string):
+    """Tries to set the GitHub secret directly via the gh CLI, piping the value in on
+    stdin so it never appears as a command-line argument, gets logged, or needs to be
+    copy/pasted by hand. Returns True on success, False if gh isn't usable here (not
+    installed, not signed in, no repo detected, etc.) - in which case the caller falls
+    back to printing the string for manual entry."""
+    if shutil.which("gh") is None:
+        return False
+    try:
+        result = subprocess.run(
+            ["gh", "secret", "set", SECRET_NAME],
+            input=session_string,
+            text=True,
+            capture_output=True,
+        )
+    except OSError:
+        return False
+    if result.returncode != 0:
+        print(f"(gh secret set failed: {result.stderr.strip()})")
+        return False
+    return True
+
 
 API_ID = input("API ID (same apiId used for the Android app build): ").strip()
 API_HASH = input("API hash (same apiHash used for the Android app build): ").strip()
 
 with TelegramClient(StringSession(), int(API_ID), API_HASH) as client:
     session_string = client.session.save()
-    print("\n" + "=" * 60)
-    print("Login successful. Save this as the TELEGRAM_SESSION_STRING secret:")
+
+print("\nLogin successful. Saving it as the repo secret via gh...")
+if save_secret_via_gh(session_string):
+    print(f"Done - {SECRET_NAME} is now set on the repo. No copy/paste needed.")
+else:
+    print(
+        "\nCouldn't set it automatically (gh not available/signed in here), so "
+        "you'll need to add it by hand this one time:"
+    )
     print("=" * 60)
     print(session_string)
     print("=" * 60)
+    print(
+        f"Go to the repo's Settings -> Secrets and variables -> Actions, and add a "
+        f"new secret named {SECRET_NAME} with the value above."
+    )

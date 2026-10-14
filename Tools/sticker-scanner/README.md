@@ -32,16 +32,19 @@ backend database, on a schedule, with no manual work after the one-time setup be
    just re-enter the same ones you used before.)
 3. It will then ask for a phone number and the login code Telegram sends you. This logs
    in once, right here, and never needs to happen again.
-4. It prints a long string. Copy that whole string.
-5. Go to the repo's **Settings → Secrets and variables → Actions**, and add a new
-   secret named `TELEGRAM_SESSION_STRING` with that string as the value.
+4. That's it - in a Codespace, `gh` (GitHub's CLI) is already installed and signed in,
+   so the script saves the session string straight to the repo as the
+   `TELEGRAM_SESSION_STRING` secret for you. Nothing to copy or paste.
+
+   If `gh` isn't available for some reason, the script falls back to printing the
+   string instead, with instructions to add it by hand under
+   **Settings → Secrets and variables → Actions → New repository secret**.
 
 **Security note:** that string is equivalent to being logged into a Telegram account
-from a new device - treat it like a password, and never paste it anywhere except that
-GitHub secret field. Since this will run unattended on a schedule, it's safer to use a
-secondary/throwaway Telegram account for this login rather than your main personal
-account - if that account ever needs to be logged out, you can do that from Telegram's
-own Settings → Devices on that account.
+from a new device - treat it like a password. Since this will run unattended on a
+schedule, it's safer to use a secondary/throwaway Telegram account for this login
+rather than your main personal account - if that account ever needs to be logged out,
+you can do that from Telegram's own Settings → Devices on that account.
 
 ## Running it
 
