@@ -43,6 +43,11 @@ import tw.nekomimi.nekogram.settings.GroupCardHelper;
  */
 public class StickerPackDetailActivity extends BaseFragment {
 
+    private static final int GRID_COLUMNS = 4;
+    private static final int GRID_CELL_DP = 80;
+    private static final int GRID_PADDING_DP = 8; // top+bottom padding applied to gridView, each side
+    private static final int GRID_MIN_HEIGHT_DP = 160; // used while loading/on error, before the real count is known
+
     private final StickerPackInfo pack;
 
     private BackupImageView iconView;
@@ -141,7 +146,9 @@ public class StickerPackDetailActivity extends BaseFragment {
 
         LinearLayout ratingRow = new LinearLayout(context);
         ratingRow.setOrientation(LinearLayout.HORIZONTAL);
-        ratingRow.setGravity(Gravity.CENTER_VERTICAL);
+        // Centered as a group (not just vertically) so the stars + number sit in the
+        // middle of the card instead of hugging the left edge.
+        ratingRow.setGravity(Gravity.CENTER);
         statsCard.addView(ratingRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, 10));
 
         starsRow = new LinearLayout(context);
@@ -165,18 +172,27 @@ public class StickerPackDetailActivity extends BaseFragment {
         likesCountView = createStatRow(context, statsCard, "Likes");
         downloadsCountView = createStatRow(context, statsCard, "Downloads");
 
-        // Real sticker grid.
+        // Real sticker grid. This sits inside the screen's outer ScrollView, so instead of
+        // boxing it to a fixed height (which either cut the last row off or left dead
+        // space, and fought the outer scroll with its own internal one), its height is
+        // computed from the actual sticker count once the set loads (see updateGridHeight())
+        // so the card always extends exactly to fit all the stickers - never clipped, never
+        // short.
         gridFrame = new FrameLayout(context);
-        LinearLayout.LayoutParams gridFrameParams = LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 260);
+        LinearLayout.LayoutParams gridFrameParams = LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, GRID_MIN_HEIGHT_DP);
         gridFrameParams.setMargins(AndroidUtilities.dp(16), AndroidUtilities.dp(8), AndroidUtilities.dp(16), AndroidUtilities.dp(8));
         root.addView(gridFrame, gridFrameParams);
         gridFrame.setBackground(GroupCardHelper.cardBackground(context, GroupCardHelper.POS_SINGLE));
 
         gridView = new RecyclerListView(context);
-        GridLayoutManager layoutManager = new GridLayoutManager(context, 4);
+        GridLayoutManager layoutManager = new GridLayoutManager(context, GRID_COLUMNS);
         gridView.setLayoutManager(layoutManager);
         gridView.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8));
         gridView.setClipToPadding(false);
+        // The outer ScrollView already owns scrolling for the whole screen - the grid's
+        // height always matches its content (see updateGridHeight()), so it never needs to
+        // scroll on its own.
+        gridView.setNestedScrollingEnabled(false);
         gridView.setAdapter(new StickerAdapter());
         gridFrame.addView(gridView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
@@ -305,7 +321,25 @@ public class StickerPackDetailActivity extends BaseFragment {
         if (gridView.getAdapter() != null) {
             gridView.getAdapter().notifyDataSetChanged();
         }
+        updateGridHeight();
         updateActionButton();
+    }
+
+    /** Sizes the grid card to exactly fit every sticker (full rows of GRID_COLUMNS), so it
+     *  always extends properly to the bottom instead of being clipped by - or leaving dead
+     *  space below - a fixed-height box. */
+    private void updateGridHeight() {
+        int count = stickerSet != null && stickerSet.documents != null ? stickerSet.documents.size() : 0;
+        int heightDp;
+        if (count <= 0) {
+            heightDp = GRID_MIN_HEIGHT_DP;
+        } else {
+            int rows = (count + GRID_COLUMNS - 1) / GRID_COLUMNS;
+            heightDp = rows * GRID_CELL_DP + GRID_PADDING_DP * 2;
+        }
+        ViewGroup.LayoutParams params = gridFrame.getLayoutParams();
+        params.height = AndroidUtilities.dp(heightDp);
+        gridFrame.setLayoutParams(params);
     }
 
     private void applyPackIcon() {

@@ -33,20 +33,20 @@ public class StickerPackGridCell extends FrameLayout {
     public StickerPackGridCell(Context context) {
         super(context);
         setBackground(GroupCardHelper.cardBackground(context, GroupCardHelper.POS_SINGLE));
-        setPadding(AndroidUtilities.dp(10), AndroidUtilities.dp(10), AndroidUtilities.dp(10), AndroidUtilities.dp(10));
+        setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8));
 
         LinearLayout column = new LinearLayout(context);
         column.setOrientation(LinearLayout.VERTICAL);
         addView(column, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         iconView = new BackupImageView(context);
-        iconView.setRoundRadius(AndroidUtilities.dp(14));
+        iconView.setRoundRadius(AndroidUtilities.dp(12));
         GradientDrawable iconBg = new GradientDrawable();
         iconBg.setShape(GradientDrawable.RECTANGLE);
-        iconBg.setCornerRadius(AndroidUtilities.dp(14));
+        iconBg.setCornerRadius(AndroidUtilities.dp(12));
         iconBg.setColor(Theme.getColor(Theme.key_windowBackgroundGray));
         iconView.setBackground(iconBg);
-        column.addView(iconView, LayoutHelper.createLinear(72, 72, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 8));
+        column.addView(iconView, LayoutHelper.createLinear(58, 58, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 6));
 
         // Display Name only - the technical short_name is never shown anywhere in this cell.
         titleView = new TextView(context);

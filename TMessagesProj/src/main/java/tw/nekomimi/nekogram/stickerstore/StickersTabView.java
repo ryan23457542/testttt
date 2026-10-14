@@ -54,7 +54,7 @@ public class StickersTabView extends FrameLayout {
         sortPopular.setOnClickListener(v -> setSort(StickerStoreApi.SORT_POPULAR));
         sortNewest.setOnClickListener(v -> setSort(StickerStoreApi.SORT_NEWEST));
 
-        layoutManager = new GridLayoutManager(context, 2);
+        layoutManager = new GridLayoutManager(context, 3);
         listView = new RecyclerListView(context);
         listView.setLayoutManager(layoutManager);
         listView.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(56), AndroidUtilities.dp(8), AndroidUtilities.dp(16));
@@ -191,7 +191,9 @@ public class StickersTabView extends FrameLayout {
         @Override
         public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
             StickerPackGridCell cell = new StickerPackGridCell(parent.getContext());
-            cell.setLayoutParams(new RecyclerView.LayoutParams(RecyclerView.LayoutParams.MATCH_PARENT, AndroidUtilities.dp(150)));
+            // Shorter than the old 2-column height - with 3 columns the cells are narrower,
+            // so a shorter card keeps the icon/text proportions compact instead of boxy.
+            cell.setLayoutParams(new RecyclerView.LayoutParams(RecyclerView.LayoutParams.MATCH_PARENT, AndroidUtilities.dp(132)));
             return new RecyclerListView.Holder(cell);
         }
 
