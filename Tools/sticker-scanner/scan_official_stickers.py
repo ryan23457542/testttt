@@ -56,7 +56,12 @@ REQUEST_DELAY_SECONDS = 0.3
 def env(name, required=True, default=None):
     value = os.environ.get(name, default)
     if required and not value:
-        print(f"::error::Missing required environment variable {name}", file=sys.stderr)
+        hint = (
+            " - add it under repo Settings -> Secrets and variables -> Actions "
+            "(for TELEGRAM_SESSION_STRING, run Tools/sticker-scanner/login.py once)."
+            if name == "TELEGRAM_SESSION_STRING" else ""
+        )
+        print(f"::error::Missing required environment variable {name}{hint}", file=sys.stderr)
         sys.exit(1)
     return value
 
@@ -160,9 +165,26 @@ def main():
     api_key = env("STICKER_API_KEY", required=False)
 
     print("Connecting to Telegram...")
-    with TelegramClient(StringSession(session_string), int(api_id), api_hash) as client:
+    client = TelegramClient(StringSession(session_string.strip()), int(api_id), api_hash)
+    # IMPORTANT: use connect() + is_user_authorized(), NOT `with TelegramClient(...)` /
+    # client.start(). start() falls back to asking for a phone number on stdin whenever
+    # the session isn't logged in, which crashes with EOFError in CI (no terminal). A
+    # session string that is present but invalid/expired/revoked looks exactly like that,
+    # so check explicitly and fail with a clear message instead.
+    try:
+        client.connect()
+        if not client.is_user_authorized():
+            print(
+                "::error::TELEGRAM_SESSION_STRING is set but Telegram says it is not logged in "
+                "(expired, revoked, or copied incorrectly). Re-run Tools/sticker-scanner/login.py "
+                "to generate a fresh one and update the TELEGRAM_SESSION_STRING secret.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         print("Fetching Telegram's official sticker sets (featured + old featured)...")
         official = fetch_official_short_names(client)
+    finally:
+        client.disconnect()
     print(f"Found {len(official)} official sticker sets from Telegram.")
 
     print("Fetching already-known packs from our own backend...")
