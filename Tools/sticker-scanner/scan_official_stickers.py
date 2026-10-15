@@ -207,6 +207,29 @@ def add_pack(base_url, api_key, short_name, created_at):
     return resp
 
 
+def build_pack_document(short_name, created_at):
+    """The exact stickers_packs document shape. published_at is a real datetime (stored as
+    an ISODate), which the HTTP API can't do - it stores whatever string it's sent."""
+    return {
+        "short_name": short_name,
+        "category": DEFAULT_CATEGORY,
+        "download_count": 0,
+        "total_likes": 0,
+        "rating": {"avg": 0.0, "count": 0},
+        "owner_telegram_id": OWNER_MARKER,
+        "status": "published",
+        "is_active": True,
+        "report_count": 0,
+        "published_at": (created_at or datetime.now(timezone.utc)).astimezone(timezone.utc),
+    }
+
+
+def open_mongo_collection(uri, db_name):
+    from pymongo import MongoClient
+    client = MongoClient(uri, serverSelectionTimeoutMS=30000)
+    return client[db_name]["stickers_packs"]
+
+
 def main():
     api_id = env("API_ID")
     api_hash = env("API_HASH")
@@ -214,9 +237,18 @@ def main():
     base_url = env("STICKER_API_BASE_URL").rstrip("/")
     api_key = env("STICKER_API_KEY", required=False)
 
+    # If MONGODB_URI is set, read/write MongoDB directly (exact document types, e.g. a real
+    # ISODate for published_at). Otherwise fall back to the backend's HTTP API, which stores
+    # published_at as a plain string.
+    mongo_uri = env("MONGODB_URI", required=False)
+    collection = open_mongo_collection(mongo_uri, env("MONGODB_DB", required=False) or "Kuro") if mongo_uri else None
+
     # Backend first: it may be asleep (Render free tier), so wake it while we do the rest.
     print("Fetching already-known packs from our own backend...")
-    existing = fetch_existing_short_names(base_url, api_key)
+    if collection is not None:
+        existing = {d["short_name"] for d in collection.find({}, {"short_name": 1}) if d.get("short_name")}
+    else:
+        existing = fetch_existing_short_names(base_url, api_key)
     print(f"Backend already has {len(existing)} packs.")
 
     print("Connecting to Telegram...")
@@ -253,6 +285,15 @@ def main():
 
     added, failed = 0, 0
     for short_name in new_short_names:
+        if collection is not None:
+            try:
+                collection.insert_one(build_pack_document(short_name, created_dates.get(short_name)))
+                added += 1
+                print(f"  added: {short_name}")
+            except Exception as e:
+                failed += 1
+                print(f"  FAILED: {short_name} - {type(e).__name__}: {str(e)[:200]}")
+            continue
         resp = add_pack(base_url, api_key, short_name, created_dates.get(short_name))
         if resp.ok:
             added += 1

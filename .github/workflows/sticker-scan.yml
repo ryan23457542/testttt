@@ -23,4 +23,6 @@ jobs:
           TELEGRAM_SESSION_STRING: ${{ secrets.TELEGRAM_SESSION_STRING }}
           STICKER_API_BASE_URL: ${{ secrets.STICKER_API_BASE_URL || 'https://backend-api-gn09.onrender.com' }}
           STICKER_API_KEY: ${{ secrets.STICKER_API_KEY }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB }}
         run: python3 Tools/sticker-scanner/scan_official_stickers.py
