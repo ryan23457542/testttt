@@ -67,8 +67,53 @@ def save_secret_via_gh(session_string):
 API_ID = input("API ID (same apiId used for the Android app build): ").strip()
 API_HASH = input("API hash (same apiHash used for the Android app build): ").strip()
 
-with TelegramClient(StringSession(), int(API_ID), API_HASH) as client:
+def login_with_code(client):
+    """Normal login: Telegram sends a code - NOTE it usually arrives INSIDE the Telegram
+    app (chat named "Telegram", with the 5-digit code) on any device already logged in to
+    that account, not as an SMS."""
+    client.start()  # prompts for phone, code, and 2FA password if needed
+
+
+def login_with_link(client):
+    """Fallback when no code ever arrives: log in by opening a tg://login link in the
+    Telegram app on a device that's already logged in (the same mechanism as
+    Settings -> Devices -> Link Desktop Device, but via link instead of scanning a QR)."""
+    from getpass import getpass
+    from telethon.errors import SessionPasswordNeededError
+
+    client.connect()
+    qr = client.qr_login()
+    while True:
+        print("\nOpen this link in the Telegram app (tap it, or paste it into any chat")
+        print("and tap it there), then confirm the login:\n")
+        print(qr.url)
+        try:
+            qr.wait(timeout=60)
+            break
+        except SessionPasswordNeededError:
+            client.sign_in(password=getpass("2FA password: "))
+            break
+        except TimeoutError:
+            print("\n(link expired, generating a new one...)")
+            qr.recreate()
+
+
+print("\nHow do you want to log in?")
+print("  1) Phone number + code (default)")
+print("  2) Link (use this if Telegram never sends you a code)")
+method = input("Choose 1 or 2: ").strip() or "1"
+
+client = TelegramClient(StringSession(), int(API_ID), API_HASH)
+try:
+    if method == "2":
+        login_with_link(client)
+    else:
+        login_with_code(client)
+    if not client.is_user_authorized():
+        raise SystemExit("Login did not complete - nothing was saved.")
     session_string = client.session.save()
+finally:
+    client.disconnect()
 
 print("\nLogin successful. Saving it as the repo secret via gh...")
 if save_secret_via_gh(session_string):
