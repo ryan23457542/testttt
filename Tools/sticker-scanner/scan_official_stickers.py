@@ -37,6 +37,7 @@ supplied in CI, or export them yourself to run this locally):
 import os
 import sys
 import time
+from datetime import datetime, timezone
 
 import requests
 from telethon.sync import TelegramClient
@@ -168,10 +169,20 @@ def fetch_existing_short_names(base_url, api_key):
 
 def add_pack(base_url, api_key, short_name):
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    # Full document shape, matching the existing stickers_packs documents (the backend's
+    # create endpoint didn't fill these defaults in by itself - a pack created with only
+    # short_name/category/owner came out missing every other field).
     payload = {
         "short_name": short_name,
         "category": DEFAULT_CATEGORY,
         "owner_telegram_id": OWNER_MARKER,
+        "download_count": 0,
+        "total_likes": 0,
+        "rating": {"avg": 0, "count": 0},
+        "status": "published",
+        "is_active": True,
+        "report_count": 0,
+        "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
     }
     resp = request_with_retry("POST", f"{base_url}/api/v1/stickers", json=payload, headers=headers)
     return resp
