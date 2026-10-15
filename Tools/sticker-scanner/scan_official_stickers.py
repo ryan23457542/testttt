@@ -51,6 +51,26 @@ DEFAULT_CATEGORY = "Custom"
 OLD_FEATURED_PAGE_SIZE = 50
 OLD_FEATURED_MAX_PAGES = 200  # safety cap - stop even if Telegram keeps paginating
 REQUEST_DELAY_SECONDS = 0.3
+REQUEST_TIMEOUT_SECONDS = 90
+REQUEST_RETRIES = 4
+
+
+def request_with_retry(method, url, **kwargs):
+    """The backend is on Render's free tier, which sleeps when idle and can take a minute
+    or more to wake on the first request - so use a long timeout and retry a few times
+    (on timeouts, connection errors, and 502/503/504 'still waking up' responses)."""
+    last_error = None
+    for attempt in range(1, REQUEST_RETRIES + 1):
+        try:
+            resp = requests.request(method, url, timeout=REQUEST_TIMEOUT_SECONDS, **kwargs)
+            if resp.status_code not in (502, 503, 504):
+                return resp
+            last_error = f"HTTP {resp.status_code}"
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            last_error = type(e).__name__
+        print(f"  backend not ready (attempt {attempt}/{REQUEST_RETRIES}: {last_error}), retrying...")
+        time.sleep(10 * attempt)
+    raise RuntimeError(f"Backend did not respond after {REQUEST_RETRIES} attempts ({last_error}): {url}")
 
 
 def env(name, required=True, default=None):
@@ -106,11 +126,11 @@ def fetch_existing_short_names(base_url, api_key):
     page = 1
     limit = 50
     while True:
-        resp = requests.get(
+        resp = request_with_retry(
+            "GET",
             f"{base_url}/api/v1/stickers",
             params={"page": page, "limit": limit},
             headers=headers,
-            timeout=20,
         )
         resp.raise_for_status()
         body = resp.json()
@@ -153,7 +173,7 @@ def add_pack(base_url, api_key, short_name):
         "category": DEFAULT_CATEGORY,
         "owner_telegram_id": OWNER_MARKER,
     }
-    resp = requests.post(f"{base_url}/api/v1/stickers", json=payload, headers=headers, timeout=20)
+    resp = request_with_retry("POST", f"{base_url}/api/v1/stickers", json=payload, headers=headers)
     return resp
 
 
