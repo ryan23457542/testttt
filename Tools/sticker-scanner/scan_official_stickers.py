@@ -45,7 +45,9 @@ from telethon.sessions import StringSession
 from telethon.tl.functions.messages import (
     GetFeaturedStickersRequest,
     GetOldFeaturedStickersRequest,
+    GetStickerSetRequest,
 )
+from telethon.tl.types import InputStickerSetShortName
 
 OWNER_MARKER = "telegram_official"
 DEFAULT_CATEGORY = "Custom"
@@ -117,6 +119,23 @@ def fetch_official_short_names(client):
     return found
 
 
+def telegram_created_at(client, short_name):
+    """Telegram has no 'pack created' field on a sticker set. The closest real value is the
+    upload date of the pack's stickers (each sticker document carries a `date`), so use the
+    EARLIEST one as the pack's creation time. Returns an aware datetime, or None if it
+    can't be determined (caller falls back to 'now')."""
+    try:
+        result = client(GetStickerSetRequest(stickerset=InputStickerSetShortName(short_name), hash=0))
+        dates = [d.date for d in getattr(result, "documents", []) if getattr(d, "date", None)]
+        if not dates:
+            return None
+        earliest = min(dates)
+        return earliest if earliest.tzinfo else earliest.replace(tzinfo=timezone.utc)
+    except Exception as e:  # one bad pack must not abort the whole run
+        print(f"  (couldn't read creation date for {short_name}: {type(e).__name__})")
+        return None
+
+
 def fetch_existing_short_names(base_url, api_key):
     """Pages through our own GET /api/v1/stickers list endpoint and returns the set of
     short_names already stored, so we never try to insert a duplicate. Parsing mirrors
@@ -167,7 +186,7 @@ def fetch_existing_short_names(base_url, api_key):
     return existing
 
 
-def add_pack(base_url, api_key, short_name):
+def add_pack(base_url, api_key, short_name, created_at):
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     # Full document shape, matching the existing stickers_packs documents (the backend's
     # create endpoint didn't fill these defaults in by itself - a pack created with only
@@ -182,7 +201,7 @@ def add_pack(base_url, api_key, short_name):
         "status": "published",
         "is_active": True,
         "report_count": 0,
-        "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "published_at": (created_at or datetime.now(timezone.utc)).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
     }
     resp = request_with_retry("POST", f"{base_url}/api/v1/stickers", json=payload, headers=headers)
     return resp
@@ -195,6 +214,11 @@ def main():
     base_url = env("STICKER_API_BASE_URL").rstrip("/")
     api_key = env("STICKER_API_KEY", required=False)
 
+    # Backend first: it may be asleep (Render free tier), so wake it while we do the rest.
+    print("Fetching already-known packs from our own backend...")
+    existing = fetch_existing_short_names(base_url, api_key)
+    print(f"Backend already has {len(existing)} packs.")
+
     print("Connecting to Telegram...")
     client = TelegramClient(StringSession(session_string.strip()), int(api_id), api_hash)
     # IMPORTANT: use connect() + is_user_authorized(), NOT `with TelegramClient(...)` /
@@ -202,6 +226,7 @@ def main():
     # the session isn't logged in, which crashes with EOFError in CI (no terminal). A
     # session string that is present but invalid/expired/revoked looks exactly like that,
     # so check explicitly and fail with a clear message instead.
+    created_dates = {}
     try:
         client.connect()
         if not client.is_user_authorized():
@@ -214,20 +239,21 @@ def main():
             sys.exit(1)
         print("Fetching Telegram's official sticker sets (featured + old featured)...")
         official = fetch_official_short_names(client)
+        print(f"Found {len(official)} official sticker sets from Telegram.")
+
+        new_short_names = [name for name in official if name not in existing]
+        print(f"{len(new_short_names)} new official pack(s) to add.")
+
+        # Only look up creation dates for packs we're actually adding (one request each).
+        for short_name in new_short_names:
+            time.sleep(REQUEST_DELAY_SECONDS)
+            created_dates[short_name] = telegram_created_at(client, short_name)
     finally:
         client.disconnect()
-    print(f"Found {len(official)} official sticker sets from Telegram.")
-
-    print("Fetching already-known packs from our own backend...")
-    existing = fetch_existing_short_names(base_url, api_key)
-    print(f"Backend already has {len(existing)} packs.")
-
-    new_short_names = [name for name in official if name not in existing]
-    print(f"{len(new_short_names)} new official pack(s) to add.")
 
     added, failed = 0, 0
     for short_name in new_short_names:
-        resp = add_pack(base_url, api_key, short_name)
+        resp = add_pack(base_url, api_key, short_name, created_dates.get(short_name))
         if resp.ok:
             added += 1
             print(f"  added: {short_name}")
